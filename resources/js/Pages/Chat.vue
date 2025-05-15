@@ -46,24 +46,30 @@
             @input="saveUsername"
           />
           
-          <!-- Przyciski formatowania -->
+          <!-- Przyciski formatowania z wyraźnymi symbolami -->
           <div class="format-buttons">
             <button 
               class="format-btn" 
               :class="{ active: isBoldActive }"
               @click="toggleBold"
+              title="Pogrubienie"
             >
-              <i class="fas fa-bold"></i>
+              <span class="format-icon">B</span>
             </button>
             <button 
               class="format-btn"
               :class="{ active: isUnderlineActive }" 
               @click="toggleUnderline"
+              title="Podkreślenie"
             >
-              <i class="fas fa-underline"></i>
+              <span class="format-icon format-underline">U</span>
             </button>
-            <button class="format-btn" @click="toggleEmojiPicker">
-              <i class="far fa-smile"></i>
+            <button 
+              class="format-btn" 
+              @click="toggleEmojiPicker"
+              title="Emotki"
+            >
+              <span class="format-icon">😊</span>
             </button>
           </div>
           
@@ -532,6 +538,16 @@
   .format-btn.active {
     background-color: #e6f2ff;
   }
+  
+  .format-icon {
+    font-weight: bold;
+    font-size: 16px;
+  }
+  
+  .format-underline {
+    text-decoration: underline;
+  }
+  
   
   .input-wrapper {
     flex-grow: 1;
