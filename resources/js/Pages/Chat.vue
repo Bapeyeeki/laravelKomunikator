@@ -79,20 +79,27 @@
     messages.value = res.data;
   };
   
-  const sendMessage = async () => {
-    const message = msgBox.value.innerHTML.trim();
-    if (!username.value || !message) return;
-  
-    localStorage.setItem('username', username.value);
-  
-    await axios.post('http://localhost:8000/api/messages', {
-      username: username.value,
-      message,
-      channel: currentChannel.value,
-    });
-  
-    msgBox.value.innerHTML = '';
+  const sendMessage = () => {
+  const message = msgBox.value.innerHTML.trim();
+  if (!username.value || !message) return;
+
+  const newMsg = {
+    username: username.value,
+    message: message,
+    created_at: new Date().toISOString(),
+    channel: currentChannel.value
   };
+
+  // Zapisz username do localStorage
+  localStorage.setItem('username', username.value);
+
+  // Dodaj wiadomość lokalnie
+  messages.value.push(newMsg);
+
+  // Wyczyść pole
+  msgBox.value.innerHTML = '';
+};
+
   
   const switchChannel = chan => {
     currentChannel.value = chan;
