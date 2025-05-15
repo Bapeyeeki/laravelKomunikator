@@ -43,20 +43,63 @@
             v-model="username"
             class="username-input"
             placeholder="Twoja nazwa użytkownika"
+            @input="saveUsername"
           />
-          <div contenteditable ref="msgBox" class="input-text" placeholder="Napisz wiadomość..." />
-          <button class="send-button" @click="sendMessage">
-            <svg viewBox="0 0 24 24" fill="none" xmlns="http://www.w3.org/2000/svg">
-              <path d="M2 12l18-6-7 7 7 7z" fill="#0084ff"/>
-            </svg>
-          </button>
+          
+          <!-- Przyciski formatowania -->
+          <div class="format-buttons">
+            <button 
+              class="format-btn" 
+              :class="{ active: isBoldActive }"
+              @click="toggleBold"
+            >
+              <i class="fas fa-bold"></i>
+            </button>
+            <button 
+              class="format-btn"
+              :class="{ active: isUnderlineActive }" 
+              @click="toggleUnderline"
+            >
+              <i class="fas fa-underline"></i>
+            </button>
+            <button class="format-btn" @click="toggleEmojiPicker">
+              <i class="far fa-smile"></i>
+            </button>
+          </div>
+          
+          <div class="input-wrapper">
+            <div 
+              ref="msgBox" 
+              class="input-text" 
+              contenteditable="true" 
+              placeholder="Napisz wiadomość..." 
+              @keydown.enter.prevent="onEnterPress"
+            ></div>
+            <button class="send-button" @click="sendMessage">
+              <svg viewBox="0 0 24 24" fill="none" xmlns="http://www.w3.org/2000/svg">
+                <path d="M16.6915026,12.4744748 L3.50612381,13.2599618 C3.19218622,13.2599618 3.03521743,13.4170592 3.03521743,13.5741566 L1.15159189,20.0151496 C0.8376543,20.8006365 0.99,21.89 1.77946707,22.52 C2.41,22.99 3.50612381,23.1 4.13399899,22.8429026 L21.714504,14.0454487 C22.6563168,13.5741566 23.1272231,12.6315722 22.9702544,11.6889879 C22.8132856,11.0605983 22.3423792,10.4322088 21.714504,10.118014 L4.13399899,1.16346272 C3.34915502,0.9 2.40734225,1.00636533 1.77946707,1.4776575 C0.994623095,2.10604706 0.8376543,3.0486314 1.15159189,3.99121575 L3.03521743,10.4322088 C3.03521743,10.5893061 3.34915502,10.7464035 3.50612381,10.7464035 L16.6915026,11.5318905 C16.6915026,11.5318905 17.1624089,11.5318905 17.1624089,12.0031827 C17.1624089,12.4744748 16.6915026,12.4744748 16.6915026,12.4744748 Z" fill="#0084ff"/>
+              </svg>
+            </button>
+          </div>
         </div>
+      </div>
+      
+      <!-- Panel emotek -->
+      <div v-if="showEmojiPicker" class="emoji-picker">
+        <button 
+          v-for="emoji in emojis" 
+          :key="emoji" 
+          class="emoji-btn" 
+          @click="insertEmoji(emoji)"
+        >
+          {{ emoji }}
+        </button>
       </div>
     </div>
   </template>
   
   <script setup>
-  import { ref, onMounted } from 'vue';
+  import { ref, onMounted, nextTick } from 'vue';
   import axios from 'axios';
   import Echo from 'laravel-echo';
   import Pusher from 'pusher-js';
@@ -64,8 +107,16 @@
   const messages = ref([]);
   const currentChannel = ref('general');
   const channels = ref(['general', 'projekty', 'wydarzenia']);
-  const username = ref(localStorage.getItem('username') || '');
+  const username = ref('');
   const msgBox = ref(null);
+  
+  // Zmienne dla formatowania tekstu
+  const isBoldActive = ref(false);
+  const isUnderlineActive = ref(false);
+  const showEmojiPicker = ref(false);
+  
+  // Lista emotek
+  const emojis = ref(['😊', '😂', '😍', '👍', '🎉', '👋', '❤️', '👌', '🙏', '🔥', '👏', '😎', '🤔', '😉', '🥰', '😁']);
   
   const echo = new Echo({
     broadcaster: 'pusher',
@@ -74,49 +125,161 @@
     forceTLS: true,
   });
   
+  // Ładowanie wiadomości z API
   const loadMessages = async () => {
-    const res = await axios.get(`http://localhost:8000/api/messages?channel=${currentChannel.value}`);
-    messages.value = res.data;
+    try {
+      const res = await axios.get(`http://localhost:8000/api/messages?channel=${currentChannel.value}`);
+      messages.value = res.data;
+      scrollToBottom();
+    } catch (err) {
+      console.error("Błąd ładowania wiadomości z bazy:", err);
+    }
   };
   
-  const sendMessage = () => {
-  const message = msgBox.value.innerHTML.trim();
-  if (!username.value || !message) return;
-
-  const newMsg = {
-    username: username.value,
-    message: message,
-    created_at: new Date().toISOString(),
-    channel: currentChannel.value
+  // Przewinięcie czatu na dół
+  const scrollToBottom = () => {
+    nextTick(() => {
+      const messagesContainer = document.querySelector('.messages');
+      if (messagesContainer) {
+        messagesContainer.scrollTop = messagesContainer.scrollHeight;
+      }
+    });
   };
-
-  // Zapisz username do localStorage
-  localStorage.setItem('username', username.value);
-
-  // Dodaj wiadomość lokalnie
-  messages.value.push(newMsg);
-
-  // Wyczyść pole
-  msgBox.value.innerHTML = '';
-};
-
   
+  // Przełączanie pogrubienia tekstu
+  const toggleBold = () => {
+    isBoldActive.value = !isBoldActive.value;
+    applyFormatting('bold');
+  };
+  
+  // Przełączanie podkreślenia tekstu
+  const toggleUnderline = () => {
+    isUnderlineActive.value = !isUnderlineActive.value;
+    applyFormatting('underline');
+  };
+  
+  // Zastosowanie formatowania do zaznaczonego tekstu
+  const applyFormatting = (format) => {
+    // Musimy użyć document.execCommand, ponieważ pracujemy z polem contenteditable
+    msgBox.value.focus();
+    document.execCommand(format, false, null);
+  };
+  
+  // Pokazanie/ukrycie panelu emotek
+  const toggleEmojiPicker = () => {
+    showEmojiPicker.value = !showEmojiPicker.value;
+  };
+  
+  // Wstawianie emotki do tekstu
+  const insertEmoji = (emoji) => {
+    // Focus na polu wiadomości
+    msgBox.value.focus();
+    
+    // Wstawienie emotki w miejscu kursora
+    const selection = window.getSelection();
+    if (selection.rangeCount) {
+      const range = selection.getRangeAt(0);
+      range.deleteContents();
+      range.insertNode(document.createTextNode(emoji));
+      range.collapse(false);
+      selection.removeAllRanges();
+      selection.addRange(range);
+    } else {
+      // Jeśli nie ma zaznaczenia, dodaj na końcu
+      msgBox.value.innerHTML += emoji;
+    }
+    
+    // Ukryj panel emotek po wybraniu
+    showEmojiPicker.value = false;
+  };
+  
+  // Obsługa klawisza Enter (bez Shift) w polu wiadomości
+  const onEnterPress = (e) => {
+    if (!e.shiftKey) {
+      e.preventDefault();
+      sendMessage();
+    }
+  };
+  
+  // Zapisanie nazwy użytkownika w localStorage
+  const saveUsername = () => {
+    localStorage.setItem('username', username.value);
+  };
+  
+  // Wysłanie wiadomości
+  const sendMessage = async () => {
+    const message = msgBox.value.innerHTML.trim();
+    if (!username.value || !message) return;
+
+    const newMsg = {
+      username: username.value,
+      message: message,
+      created_at: new Date().toISOString(),
+      channel: currentChannel.value
+    };
+
+    localStorage.setItem('username', username.value);
+
+    // Dodaj lokalnie
+    messages.value.push(newMsg);
+    
+    // Wyślij do API
+    try {
+      await axios.post('http://localhost:8000/api/messages', newMsg);
+    } catch (err) {
+      console.error("Błąd wysyłania wiadomości do bazy:", err);
+    }
+
+    // Wyczyść pole
+    msgBox.value.innerHTML = '';
+    
+    // Przewiń czat na dół
+    scrollToBottom();
+  };
+  
+  // Funkcja zmiany kanału
   const switchChannel = chan => {
     currentChannel.value = chan;
     loadMessages();
   };
   
+  // Dodawanie nowego kanału
+  const addChannel = () => {
+    const newChannel = prompt('Podaj nazwę nowego kanału:');
+    if (!newChannel) return;
+    
+    const channelName = newChannel.trim().toLowerCase();
+    if (!channelName || channels.value.includes(channelName)) {
+      alert('Ten kanał już istnieje lub ma nieprawidłową nazwę!');
+      return;
+    }
+    
+    channels.value.push(channelName);
+    currentChannel.value = channelName;
+    loadMessages();
+  };
+  
+  // Formatowanie czasu
   const formatTime = time => {
     const date = new Date(time);
     return date.toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' });
   };
   
   onMounted(() => {
+    // Wczytaj nazwę użytkownika z localStorage
+    const savedUsername = localStorage.getItem('username');
+    if (savedUsername) {
+      username.value = savedUsername;
+    }
+    
+    // Wczytaj wiadomości
     loadMessages();
   
+    // Ustaw nasłuchiwanie na nowe wiadomości
     echo.channel('chat').listen('.new-message', e => {
       if (e.message.channel !== currentChannel.value) return;
       messages.value.push(e.message);
+      scrollToBottom();
     });
   });
   </script>
@@ -141,6 +304,7 @@
     margin: 0 auto;
     background-color: white;
     box-shadow: 0 2px 10px rgba(0, 0, 0, 0.1);
+    position: relative;
   }
   
   /* Sidebar */
@@ -200,13 +364,6 @@
     align-items: center;
   }
   
-  .channel:before {
-    content: '#';
-    margin-right: 6px;
-    font-weight: bold;
-    color: #0084ff;
-  }
-  
   .channel:hover {
     background-color: #f5f5f5;
   }
@@ -224,14 +381,11 @@
     font-size: 14px;
     transition: background-color 0.2s;
     border-radius: 8px;
+    background: none;
+    border: none;
+    text-align: left;
     display: flex;
     align-items: center;
-  }
-  
-  .add-channel:before {
-    content: '+';
-    margin-right: 6px;
-    font-weight: bold;
   }
   
   .add-channel:hover {
@@ -313,14 +467,14 @@
     color: #65676B;
   }
   
-  .message.sent .user {
-    display: none;
-  }
-  
   .time {
     font-size: 11px;
     color: #65676B;
     margin-left: 4px;
+  }
+  
+  .message.sent .user {
+    display: none;
   }
   
   .message.sent .time {
@@ -386,7 +540,6 @@
     background-color: #f0f2f5;
     border-radius: 20px;
     padding: 0 4px 0 12px;
-    margin-right: 8px;
   }
   
   .input-text {
@@ -424,14 +577,13 @@
   .send-button svg {
     width: 20px;
     height: 20px;
-    fill: #0084ff;
   }
   
   .send-button:hover {
     background-color: #e6f2ff;
   }
   
-  /* Emoji Picker */
+  /* Panel emotek */
   .emoji-picker {
     position: absolute;
     bottom: 80px;
@@ -459,16 +611,6 @@
   
   .emoji-btn:hover {
     background-color: #f0f2f5;
-  }
-  
-  .error {
-    color: #fa3e3e;
-    padding: 12px;
-    border: 1px solid #fa3e3e;
-    background-color: #ffecec;
-    border-radius: 8px;
-    margin: 10px 0;
-    font-size: 14px;
   }
   
   /* Responsive Design */
@@ -512,4 +654,3 @@
     }
   }
   </style>
-  
